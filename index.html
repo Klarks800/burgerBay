@@ -122,6 +122,74 @@
                 suppressMediaSessionDeferred();
             }
 
+            function collectLaunchParams() {
+                var params = new URLSearchParams(window.location.search || "");
+                var hash = window.location.hash ? window.location.hash.replace(/^#\/?/, "") : "";
+                if (hash.indexOf("=") >= 0) {
+                    var hashParams = new URLSearchParams(hash);
+                    hashParams.forEach(function (value, key) {
+                        params.set(key, value);
+                    });
+                }
+
+                try {
+                    var referrer = document.referrer || "";
+                    var queryStart = referrer.indexOf("?");
+                    if (queryStart >= 0) {
+                        var referrerParams = new URLSearchParams(referrer.substring(queryStart));
+                        referrerParams.forEach(function (value, key) {
+                            params.set(key, value);
+                        });
+                    }
+                } catch (exception) {
+                }
+
+                return params;
+            }
+
+            function detectOKPlatform() {
+                try {
+                    var href = window.location && window.location.href ? window.location.href : "";
+                    var referrer = document.referrer || "";
+                    var ancestors = "";
+                    if (window.location && window.location.ancestorOrigins) {
+                        for (var i = 0; i < window.location.ancestorOrigins.length; i++) {
+                            ancestors += " " + window.location.ancestorOrigins[i];
+                        }
+                    }
+
+                    var text = (href + " " + referrer + " " + ancestors).toLowerCase();
+                    if (text.indexOf("ok.ru") >= 0 || text.indexOf("odnoklassniki") >= 0) {
+                        return true;
+                    }
+
+                    var params = collectLaunchParams();
+                    var okParamNames = ["application_key", "apiconnection", "logged_user_id", "api_server", "session_key", "auth_sig"];
+                    var okParamCount = 0;
+                    for (var j = 0; j < okParamNames.length; j++) {
+                        if (params.has(okParamNames[j])) {
+                            okParamCount++;
+                        }
+                    }
+
+                    if (okParamCount >= 2) {
+                        return true;
+                    }
+
+                    var stPlatform = (params.get("st.platform") || params.get("st_platform") || "").toLowerCase();
+                    if (stPlatform.indexOf("ok") >= 0 || stPlatform.indexOf("odnoklassniki") >= 0) {
+                        return true;
+                    }
+
+                    return params.has("st.app") && params.has("st.signature") && !params.has("vk_app_id");
+                }
+                catch (exception) {
+                    console.warn("[MirraSDK] Failed to detect OK platform override.", exception);
+                    return false;
+                }
+            }
+
+            window.BurgerBay_IsOKPlatform = detectOKPlatform;
             window.BurgerBay_SuppressMediaSession = suppressMediaSessionDeferred;
             patchAudioContextConstructor();
             suppressMediaSessionDeferred();
@@ -135,39 +203,7 @@
             document.addEventListener("change", suppressMediaSessionDeferred, true);
         })();
 
-        window.mirraSDK_library_shouldForceOKPlatform = window.mirraSDK_library_shouldForceOKPlatform || function () {
-            try {
-                var href = window.location && window.location.href ? window.location.href : "";
-                var referrer = document.referrer || "";
-                var text = (href + " " + referrer).toLowerCase();
-                if (text.indexOf("ok.ru") >= 0 || text.indexOf("odnoklassniki") >= 0) {
-                    return true;
-                }
-
-                var params = new URLSearchParams(window.location.search || "");
-                var hash = window.location.hash ? window.location.hash.replace(/^#\/?/, "") : "";
-                if (hash.indexOf("=") >= 0) {
-                    var hashParams = new URLSearchParams(hash);
-                    hashParams.forEach(function (value, key) {
-                        params.set(key, value);
-                    });
-                }
-
-                var okParamNames = ["application_key", "apiconnection", "logged_user_id", "api_server"];
-                var okParamCount = 0;
-                for (var i = 0; i < okParamNames.length; i++) {
-                    if (params.has(okParamNames[i])) {
-                        okParamCount++;
-                    }
-                }
-
-                return okParamCount >= 2;
-            }
-            catch (exception) {
-                console.warn("[MirraSDK] Failed to detect OK platform override.", exception);
-                return false;
-            }
-        };
+        window.mirraSDK_library_shouldForceOKPlatform = window.mirraSDK_library_shouldForceOKPlatform || window.BurgerBay_IsOKPlatform;
     </script>
     <script src="unityApp.js"></script>
 </body>
