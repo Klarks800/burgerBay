@@ -28,6 +28,113 @@
 
     <!-- Unity loader script -->
     <script>
+        (function () {
+            function suppressMediaSession() {
+                if (!navigator.mediaSession) {
+                    return;
+                }
+
+                try {
+                    navigator.mediaSession.metadata = null;
+                } catch (exception) {
+                }
+
+                try {
+                    navigator.mediaSession.playbackState = "none";
+                } catch (exception) {
+                }
+
+                var actions = [
+                    "play",
+                    "pause",
+                    "seekbackward",
+                    "seekforward",
+                    "previoustrack",
+                    "nexttrack",
+                    "stop",
+                    "seekto"
+                ];
+
+                for (var i = 0; i < actions.length; i++) {
+                    try {
+                        navigator.mediaSession.setActionHandler(actions[i], null);
+                    } catch (exception) {
+                    }
+                }
+            }
+
+            function suppressMediaSessionDeferred() {
+                suppressMediaSession();
+                setTimeout(suppressMediaSession, 0);
+                setTimeout(suppressMediaSession, 250);
+                setTimeout(suppressMediaSession, 1000);
+            }
+
+            var audioContexts = [];
+
+            function registerAudioContext(context) {
+                if (context && audioContexts.indexOf(context) < 0) {
+                    audioContexts.push(context);
+                }
+
+                return context;
+            }
+
+            function patchAudioContextConstructor() {
+                var NativeAudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!NativeAudioContext || NativeAudioContext.__burgerBayPatched) {
+                    return;
+                }
+
+                function BurgerBayAudioContext(options) {
+                    return registerAudioContext(new NativeAudioContext(options));
+                }
+
+                BurgerBayAudioContext.prototype = NativeAudioContext.prototype;
+                if (Object.setPrototypeOf) {
+                    Object.setPrototypeOf(BurgerBayAudioContext, NativeAudioContext);
+                }
+                BurgerBayAudioContext.__burgerBayPatched = true;
+
+                window.AudioContext = BurgerBayAudioContext;
+                if (window.webkitAudioContext === NativeAudioContext) {
+                    window.webkitAudioContext = BurgerBayAudioContext;
+                }
+            }
+
+            function setAudioContextsPaused(paused) {
+                for (var i = 0; i < audioContexts.length; i++) {
+                    var context = audioContexts[i];
+                    if (!context || context.state === "closed") {
+                        continue;
+                    }
+
+                    try {
+                        if (paused && context.state === "running") {
+                            context.suspend().catch(function () {});
+                        } else if (!paused && context.state === "suspended") {
+                            context.resume().catch(function () {});
+                        }
+                    } catch (exception) {
+                    }
+                }
+
+                suppressMediaSessionDeferred();
+            }
+
+            window.BurgerBay_SuppressMediaSession = suppressMediaSessionDeferred;
+            patchAudioContextConstructor();
+            suppressMediaSessionDeferred();
+            window.addEventListener("blur", function () { setAudioContextsPaused(true); }, true);
+            window.addEventListener("focus", function () { setAudioContextsPaused(false); }, true);
+            window.addEventListener("pagehide", function () { setAudioContextsPaused(true); }, true);
+            window.addEventListener("pageshow", function () { setAudioContextsPaused(false); }, true);
+            document.addEventListener("visibilitychange", function () { setAudioContextsPaused(document.hidden); }, true);
+            document.addEventListener("pointerup", suppressMediaSessionDeferred, true);
+            document.addEventListener("touchend", suppressMediaSessionDeferred, true);
+            document.addEventListener("change", suppressMediaSessionDeferred, true);
+        })();
+
         window.mirraSDK_library_shouldForceOKPlatform = window.mirraSDK_library_shouldForceOKPlatform || function () {
             try {
                 var href = window.location && window.location.href ? window.location.href : "";
