@@ -149,6 +149,10 @@
 
             function detectOKPlatform() {
                 try {
+                    if (window.FAPI && window.FAPI.Util) {
+                        return true;
+                    }
+
                     var href = window.location && window.location.href ? window.location.href : "";
                     var referrer = document.referrer || "";
                     var ancestors = "";
@@ -159,7 +163,7 @@
                     }
 
                     var text = (href + " " + referrer + " " + ancestors).toLowerCase();
-                    if (text.indexOf("ok.ru") >= 0 || text.indexOf("odnoklassniki") >= 0) {
+                    if (text.indexOf("ok.ru") >= 0 || text.indexOf("odnoklassniki") >= 0 || text.indexOf("okcdn.ru") >= 0 || text.indexOf("api.ok.ru") >= 0) {
                         return true;
                     }
 
