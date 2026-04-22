@@ -194,10 +194,10 @@ const unityApp = {
         const progressBarFull = document.querySelector("#unity-progress-bar-full");
 
         const buildUrl = "Build";
-        const loaderUrl = buildUrl + "/GalaxyBurger[109]-mirraSDK[5.1.20]VKOK.loader.js";
+        const loaderUrl = buildUrl + "/GalaxyBurger[110]-mirraSDK[5.1.20]VKOK.loader.js";
         const config = {
             arguments: [],
-            dataUrl: buildUrl + "/cfc06dd3fb330bcbbc935a84f8e9d60f.data.unityweb",
+            dataUrl: buildUrl + "/00346a376fc0e3f68031c7aadccb46e0.data.unityweb",
             frameworkUrl: buildUrl + "/6bb26a6bf1d2ef0ccdcedc123c876cf4.js.unityweb",
             codeUrl: buildUrl + "/cc239093910c43f77b7c424483c12a5f.wasm.unityweb",
             streamingAssetsUrl: "StreamingAssets",
@@ -328,5 +328,42 @@ unityApp.tryRotationLock();
 // Lock aspect ratio.
 unityApp.tryLockAspectRatio();
 
-// Automatically start after script is loaded.
-unityApp.startLoading();
+// Start Unity after giving the host platform a short window to initialize.
+(function () {
+    function startOnce() {
+        if (window.__BurgerBayUnityLoadingStarted) {
+            return;
+        }
+
+        window.__BurgerBayUnityLoadingStarted = true;
+        unityApp.startLoading();
+    }
+
+    const ensureVkBridgeInit = window.BurgerBay_EnsureVkBridgeInit;
+    if (typeof ensureVkBridgeInit !== "function") {
+        startOnce();
+        return;
+    }
+
+    let fallbackTimeoutId = setTimeout(startOnce, 2000);
+
+    try {
+        const initPromise = ensureVkBridgeInit();
+        if (initPromise && typeof initPromise.then === "function") {
+            initPromise
+                .catch((error) => {
+                    console.warn("[BurgerBay] Early VK init promise failed.", error);
+                })
+                .finally(() => {
+                    clearTimeout(fallbackTimeoutId);
+                    startOnce();
+                });
+            return;
+        }
+    } catch (error) {
+        console.warn("[BurgerBay] Failed to request early VK init.", error);
+    }
+
+    clearTimeout(fallbackTimeoutId);
+    startOnce();
+})();

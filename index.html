@@ -29,6 +29,123 @@
     <!-- Unity loader script -->
     <script>
         (function () {
+            function collectVkLaunchParams() {
+                var params = new URLSearchParams(window.location.search || "");
+                var hash = window.location.hash ? window.location.hash.replace(/^#\/?/, "") : "";
+                if (hash.indexOf("=") >= 0) {
+                    var hashParams = new URLSearchParams(hash);
+                    hashParams.forEach(function (value, key) {
+                        params.set(key, value);
+                    });
+                }
+
+                try {
+                    var referrer = document.referrer || "";
+                    var queryStart = referrer.indexOf("?");
+                    if (queryStart >= 0) {
+                        var referrerParams = new URLSearchParams(referrer.substring(queryStart));
+                        referrerParams.forEach(function (value, key) {
+                            params.set(key, value);
+                        });
+                    }
+                } catch (exception) {
+                }
+
+                return params;
+            }
+
+            function detectVKPlatform() {
+                try {
+                    var href = window.location && window.location.href ? window.location.href : "";
+                    var referrer = document.referrer || "";
+                    var ancestors = "";
+                    if (window.location && window.location.ancestorOrigins) {
+                        for (var i = 0; i < window.location.ancestorOrigins.length; i++) {
+                            ancestors += " " + window.location.ancestorOrigins[i];
+                        }
+                    }
+
+                    var text = (href + " " + referrer + " " + ancestors).toLowerCase();
+                    if (text.indexOf("vk.com") >= 0 || text.indexOf("vkontakte") >= 0) {
+                        return true;
+                    }
+
+                    var params = collectVkLaunchParams();
+                    return params.has("vk_app_id") ||
+                        params.has("vk_user_id") ||
+                        params.has("sign") ||
+                        params.has("vk_access_token_settings");
+                }
+                catch (exception) {
+                    console.warn("[BurgerBay] Failed to detect VK platform.", exception);
+                    return false;
+                }
+            }
+
+            function ensureVkBridgeInit() {
+                if (window.__BurgerBayVkBridgeInitPromise) {
+                    return window.__BurgerBayVkBridgeInitPromise;
+                }
+
+                if (!detectVKPlatform()) {
+                    window.__BurgerBayVkBridgeInitPromise = Promise.resolve(false);
+                    return window.__BurgerBayVkBridgeInitPromise;
+                }
+
+                window.__BurgerBayVkBridgeInitPromise = new Promise(function (resolve) {
+                    function initBridge() {
+                        if (!window.vkBridge || typeof window.vkBridge.send !== "function") {
+                            console.warn("[BurgerBay] vkBridge is unavailable for early VKWebAppInit.");
+                            resolve(false);
+                            return;
+                        }
+
+                        window.__BurgerBayVkBridgeInitStartedAt = Date.now();
+                        window.vkBridge.send("VKWebAppInit")
+                            .then(function (result) {
+                                window.__BurgerBayVkBridgeInitResult = result;
+                                resolve(true);
+                            })
+                            .catch(function (exception) {
+                                console.warn("[BurgerBay] Early VKWebAppInit failed.", exception);
+                                resolve(false);
+                            });
+                    }
+
+                    if (window.vkBridge && typeof window.vkBridge.send === "function") {
+                        initBridge();
+                        return;
+                    }
+
+                    var existingScript = document.getElementById("burgerbay-vk-bridge");
+                    if (existingScript) {
+                        existingScript.addEventListener("load", initBridge, { once: true });
+                        existingScript.addEventListener("error", function () {
+                            console.warn("[BurgerBay] Failed to load early vk-bridge script.");
+                            resolve(false);
+                        }, { once: true });
+                        return;
+                    }
+
+                    var script = document.createElement("script");
+                    script.id = "burgerbay-vk-bridge";
+                    script.src = "https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js";
+                    script.async = true;
+                    script.onload = initBridge;
+                    script.onerror = function () {
+                        console.warn("[BurgerBay] Failed to load early vk-bridge script.");
+                        resolve(false);
+                    };
+                    document.head.appendChild(script);
+                });
+
+                return window.__BurgerBayVkBridgeInitPromise;
+            }
+
+            window.BurgerBay_IsLikelyVKPlatform = detectVKPlatform;
+            window.BurgerBay_EnsureVkBridgeInit = ensureVkBridgeInit;
+            ensureVkBridgeInit();
+
             function suppressMediaSession() {
                 if (!navigator.mediaSession) {
                     return;
