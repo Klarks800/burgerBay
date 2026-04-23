@@ -310,7 +310,106 @@
                 }
             }
 
+            function ensureOkSdkInit() {
+                if (window.__BurgerBayOkSdkInitPromise) {
+                    return window.__BurgerBayOkSdkInitPromise;
+                }
+
+                if (!detectOKPlatform()) {
+                    window.__BurgerBayOkSdkInitPromise = Promise.resolve(false);
+                    return window.__BurgerBayOkSdkInitPromise;
+                }
+
+                window.__BurgerBayOkSdkInitPromise = new Promise(function (resolve) {
+                    function finish(result) {
+                        window.__BurgerBayOkSdkInitResolved = !!result;
+                        resolve(!!result);
+                    }
+
+                    function initOkSdk() {
+                        if (!window.FAPI || typeof window.FAPI.init !== "function") {
+                            console.warn("[BurgerBay] OK FAPI.init is unavailable.");
+                            finish(false);
+                            return;
+                        }
+
+                        if (window.__BurgerBayOkSdkInitialized) {
+                            finish(true);
+                            return;
+                        }
+
+                        var requestParams = null;
+                        try {
+                            if (window.FAPI.Util && typeof window.FAPI.Util.getRequestParameters === "function") {
+                                requestParams = window.FAPI.Util.getRequestParameters();
+                            }
+                        } catch (requestParamsException) {
+                        }
+
+                        var launchParams = collectLaunchParams();
+                        var apiServer = (requestParams && requestParams["api_server"]) || launchParams.get("api_server") || "https://api.ok.ru/";
+                        var apiConnection = (requestParams && requestParams["apiconnection"]) || launchParams.get("apiconnection") || "";
+
+                        if (!apiConnection) {
+                            console.warn("[BurgerBay] OK SDK init skipped: apiconnection is missing.");
+                            finish(false);
+                            return;
+                        }
+
+                        try {
+                            window.FAPI.init(
+                                apiServer,
+                                apiConnection,
+                                function () {
+                                    window.__BurgerBayOkSdkInitialized = true;
+                                    console.log("[BurgerBay] OK SDK initialized.");
+                                    finish(true);
+                                },
+                                function (error) {
+                                    console.warn("[BurgerBay] OK SDK init failed.", error);
+                                    finish(false);
+                                }
+                            );
+                        } catch (initException) {
+                            console.warn("[BurgerBay] OK SDK init exception.", initException);
+                            finish(false);
+                        }
+                    }
+
+                    if (window.FAPI && typeof window.FAPI.init === "function") {
+                        initOkSdk();
+                        return;
+                    }
+
+                    var existingScript = document.getElementById("burgerbay-ok-fapi");
+                    if (existingScript) {
+                        existingScript.addEventListener("load", initOkSdk, { once: true });
+                        existingScript.addEventListener("error", function () {
+                            console.warn("[BurgerBay] Failed to load OK FAPI script.");
+                            finish(false);
+                        }, { once: true });
+                        return;
+                    }
+
+                    var script = document.createElement("script");
+                    script.id = "burgerbay-ok-fapi";
+                    script.src = "https://api.ok.ru/js/fapi5.js";
+                    script.async = true;
+                    script.defer = true;
+                    script.onload = initOkSdk;
+                    script.onerror = function () {
+                        console.warn("[BurgerBay] Failed to load OK FAPI script.");
+                        finish(false);
+                    };
+                    document.head.appendChild(script);
+                });
+
+                return window.__BurgerBayOkSdkInitPromise;
+            }
+
             window.BurgerBay_IsOKPlatform = detectOKPlatform;
+            window.BurgerBay_EnsureOkSdkInit = ensureOkSdkInit;
+            ensureOkSdkInit();
             window.BurgerBay_SuppressMediaSession = suppressMediaSessionDeferred;
             patchAudioContextConstructor();
             suppressMediaSessionDeferred();
