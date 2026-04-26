@@ -194,12 +194,12 @@ const unityApp = {
         const progressBarFull = document.querySelector("#unity-progress-bar-full");
 
         const buildUrl = "Build";
-        const loaderUrl = buildUrl + "/GalaxyBurger[127]-mirraSDK[5.1.20]VK.loader.js";
+        const loaderUrl = buildUrl + "/GalaxyBurger[128]-mirraSDK[5.1.20]VK.loader.js";
         const config = {
             arguments: [],
-            dataUrl: buildUrl + "/4e550c63cfc465f82cb82de4a80060ab.data.unityweb",
-            frameworkUrl: buildUrl + "/064825cb335be494dcff409d1b34e433.js.unityweb",
-            codeUrl: buildUrl + "/fa370487aaebe1716b239190cca8e44f.wasm.unityweb",
+            dataUrl: buildUrl + "/32370d17574144c80023c01d32e5bd35.data.unityweb",
+            frameworkUrl: buildUrl + "/b7d35d82c3dae1e4643276b36fee23da.js.unityweb",
+            codeUrl: buildUrl + "/ab59411c11fa50ff8ca94578daeaae34.wasm.unityweb",
             streamingAssetsUrl: "StreamingAssets",
             companyName: "DefaultCompany",
             productName: "Galaxy Burger",
