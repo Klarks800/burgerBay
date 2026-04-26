@@ -312,16 +312,29 @@
 
             function ensureOkSdkInit() {
                 if (window.__BurgerBayOkSdkInitPromise) {
-                    return window.__BurgerBayOkSdkInitPromise;
+                    if (window.__BurgerBayOkSdkInitialized || !window.__BurgerBayOkSdkInitFinished) {
+                        return window.__BurgerBayOkSdkInitPromise;
+                    }
+
+                    if (window.__BurgerBayOkSdkInitResolved) {
+                        return window.__BurgerBayOkSdkInitPromise;
+                    }
+
+                    window.__BurgerBayOkSdkInitPromise = null;
                 }
 
                 if (!detectOKPlatform()) {
+                    window.__BurgerBayOkSdkInitFinished = true;
+                    window.__BurgerBayOkSdkInitResolved = false;
                     window.__BurgerBayOkSdkInitPromise = Promise.resolve(false);
                     return window.__BurgerBayOkSdkInitPromise;
                 }
 
+                window.__BurgerBayOkSdkInitFinished = false;
+                window.__BurgerBayOkSdkInitResolved = false;
                 window.__BurgerBayOkSdkInitPromise = new Promise(function (resolve) {
                     function finish(result) {
+                        window.__BurgerBayOkSdkInitFinished = true;
                         window.__BurgerBayOkSdkInitResolved = !!result;
                         resolve(!!result);
                     }
@@ -347,8 +360,15 @@
                         }
 
                         var launchParams = collectLaunchParams();
-                        var apiServer = (requestParams && requestParams["api_server"]) || launchParams.get("api_server") || "https://api.ok.ru/";
-                        var apiConnection = (requestParams && requestParams["apiconnection"]) || launchParams.get("apiconnection") || "";
+                        var apiServer = (requestParams && (requestParams["api_server"] || requestParams["apiServer"])) ||
+                            launchParams.get("api_server") ||
+                            launchParams.get("apiServer") ||
+                            "https://api.ok.ru/";
+                        var apiConnection = (requestParams && (requestParams["apiconnection"] || requestParams["api_connection"] || requestParams["apiConnection"])) ||
+                            launchParams.get("apiconnection") ||
+                            launchParams.get("api_connection") ||
+                            launchParams.get("apiConnection") ||
+                            "";
 
                         if (!apiConnection) {
                             console.warn("[BurgerBay] OK SDK init skipped: apiconnection is missing.");
