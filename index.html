@@ -1,450 +1,178 @@
 <!DOCTYPE html>
-<html lang="en-us">
-<head>
-    <!-- Content encoding -->
-    <meta charset="utf-8" />
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=yes" />
-
-    <!-- Page info and stylesheets -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
     <title>Galaxy Burger</title>
-    <link rel="shortcut icon" href="TemplateData/favicon.ico">
-    <link rel="stylesheet" href="TemplateData/style.css">
-    <link rel="manifest" href="manifest.webmanifest">
-
-</head>
-<body>
-    <!-- Unity canvas -->
-    <div id="unity-container">
-        <canvas id="unity-canvas" tabindex="-1"></canvas>
-        <div id="unity-loading-bar">
-            <div id="unity-logo"></div>
-            <div id="unity-progress-bar-empty">
-                <div id="unity-progress-bar-full"></div>
-            </div>
-        </div>
+    <style>
+      html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; }
+      #unity-root { position: fixed; inset: 0; background: #000; }
+      #unity-canvas { width: 100%; height: 100%; display: block; background: #000; outline: none; }
+      #mysdk-loading { position: absolute; left: 50%; bottom: 9vh; width: min(320px, 72vw); transform: translateX(-50%); font: 14px Arial, sans-serif; color: #fff; text-align: center; pointer-events: none; }
+      #mysdk-progress { height: 4px; margin-top: 12px; overflow: hidden; background: rgba(255, 255, 255, 0.2); }
+      #mysdk-progress-fill { width: 0%; height: 100%; background: #fff; transition: width 0.15s ease-out; }
+      #unity-warning { position: absolute; left: 0; right: 0; top: 0; z-index: 10; font: 13px Arial, sans-serif; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div id="unity-root">
+      <canvas id="unity-canvas" width=1920 height=1080 tabindex="-1"></canvas>
+      <div id="unity-warning"></div>
+      <div id="mysdk-loading">
+        <div>Loading</div>
+        <div id="mysdk-progress"><div id="mysdk-progress-fill"></div></div>
+      </div>
     </div>
-
-
-    <!-- Unity loader script -->
     <script>
-        (function () {
-            function collectVkLaunchParams() {
-                var params = new URLSearchParams(window.location.search || "");
-                var hash = window.location.hash ? window.location.hash.replace(/^#\/?/, "") : "";
-                if (hash.indexOf("=") >= 0) {
-                    var hashParams = new URLSearchParams(hash);
-                    hashParams.forEach(function (value, key) {
-                        params.set(key, value);
-                    });
-                }
+      window.MySDKWebGLTemplate = { platform: "VK", template: "MySDK_VK" };
 
-                try {
-                    var referrer = document.referrer || "";
-                    var queryStart = referrer.indexOf("?");
-                    if (queryStart >= 0) {
-                        var referrerParams = new URLSearchParams(referrer.substring(queryStart));
-                        referrerParams.forEach(function (value, key) {
-                            params.set(key, value);
-                        });
-                    }
-                } catch (exception) {
-                }
+      var canvas = document.querySelector("#unity-canvas");
+      var loading = document.querySelector("#mysdk-loading");
+      var progressFill = document.querySelector("#mysdk-progress-fill");
+      var warningBanner = document.querySelector("#unity-warning");
+      var vkBridgePromise = null;
 
-                return params;
+      function unityShowBanner(msg, type) {
+        var div = document.createElement("div");
+        div.textContent = msg;
+        div.style.padding = "10px";
+        div.style.background = type === "error" ? "#b00020" : "#ffd95a";
+        div.style.color = type === "error" ? "#fff" : "#111";
+        warningBanner.appendChild(div);
+        if (type !== "error") {
+          setTimeout(function () { warningBanner.removeChild(div); }, 5000);
+        }
+      }
+
+      function loadExternalScript(src, id, timeoutMs) {
+        var existing = document.querySelector("script[data-mysdk-id='" + id + "']");
+        if (existing && existing.getAttribute("data-mysdk-loaded") === "1") {
+          return Promise.resolve();
+        }
+
+        return new Promise(function (resolve, reject) {
+          var script = existing || document.createElement("script");
+          var completed = false;
+          var timeout = setTimeout(function () {
+            if (completed) {
+              return;
             }
 
-            function detectVKPlatform() {
-                try {
-                    var href = window.location && window.location.href ? window.location.href : "";
-                    var referrer = document.referrer || "";
-                    var ancestors = "";
-                    if (window.location && window.location.ancestorOrigins) {
-                        for (var i = 0; i < window.location.ancestorOrigins.length; i++) {
-                            ancestors += " " + window.location.ancestorOrigins[i];
-                        }
-                    }
+            completed = true;
+            reject(new Error("Script load timeout: " + src));
+          }, timeoutMs || 8000);
 
-                    var text = (href + " " + referrer + " " + ancestors).toLowerCase();
-                    if (text.indexOf("vk.com") >= 0 || text.indexOf("vkontakte") >= 0) {
-                        return true;
-                    }
-
-                    var params = collectVkLaunchParams();
-                    return params.has("vk_app_id") ||
-                        params.has("vk_user_id") ||
-                        params.has("sign") ||
-                        params.has("vk_access_token_settings");
-                }
-                catch (exception) {
-                    console.warn("[BurgerBay] Failed to detect VK platform.", exception);
-                    return false;
-                }
+          script.onload = function () {
+            if (completed) {
+              return;
             }
 
-            function ensureVkBridgeInit() {
-                if (window.__BurgerBayVkBridgeInitPromise) {
-                    return window.__BurgerBayVkBridgeInitPromise;
-                }
+            completed = true;
+            clearTimeout(timeout);
+            script.setAttribute("data-mysdk-loaded", "1");
+            resolve();
+          };
 
-                if (!detectVKPlatform()) {
-                    window.__BurgerBayVkBridgeInitPromise = Promise.resolve(false);
-                    return window.__BurgerBayVkBridgeInitPromise;
-                }
-
-                window.__BurgerBayVkBridgeInitPromise = new Promise(function (resolve) {
-                    function initBridge() {
-                        if (!window.vkBridge || typeof window.vkBridge.send !== "function") {
-                            console.warn("[BurgerBay] vkBridge is unavailable for early VKWebAppInit.");
-                            resolve(false);
-                            return;
-                        }
-
-                        window.__BurgerBayVkBridgeInitStartedAt = Date.now();
-                        window.vkBridge.send("VKWebAppInit")
-                            .then(function (result) {
-                                window.__BurgerBayVkBridgeInitResult = result;
-                                resolve(true);
-                            })
-                            .catch(function (exception) {
-                                console.warn("[BurgerBay] Early VKWebAppInit failed.", exception);
-                                resolve(false);
-                            });
-                    }
-
-                    if (window.vkBridge && typeof window.vkBridge.send === "function") {
-                        initBridge();
-                        return;
-                    }
-
-                    var existingScript = document.getElementById("burgerbay-vk-bridge");
-                    if (existingScript) {
-                        existingScript.addEventListener("load", initBridge, { once: true });
-                        existingScript.addEventListener("error", function () {
-                            console.warn("[BurgerBay] Failed to load early vk-bridge script.");
-                            resolve(false);
-                        }, { once: true });
-                        return;
-                    }
-
-                    var script = document.createElement("script");
-                    script.id = "burgerbay-vk-bridge";
-                    script.src = "https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js";
-                    script.async = true;
-                    script.onload = initBridge;
-                    script.onerror = function () {
-                        console.warn("[BurgerBay] Failed to load early vk-bridge script.");
-                        resolve(false);
-                    };
-                    document.head.appendChild(script);
-                });
-
-                return window.__BurgerBayVkBridgeInitPromise;
+          script.onerror = function () {
+            if (completed) {
+              return;
             }
 
-            window.BurgerBay_IsLikelyVKPlatform = detectVKPlatform;
-            window.BurgerBay_EnsureVkBridgeInit = ensureVkBridgeInit;
-            ensureVkBridgeInit();
+            completed = true;
+            clearTimeout(timeout);
+            reject(new Error("Could not load script: " + src));
+          };
 
-            function suppressMediaSession() {
-                if (!navigator.mediaSession) {
-                    return;
-                }
+          if (!existing) {
+            script.src = src;
+            script.async = true;
+            script.setAttribute("data-mysdk-id", id);
+            document.head.appendChild(script);
+          }
+        });
+      }
 
-                try {
-                    navigator.mediaSession.metadata = null;
-                } catch (exception) {
-                }
+      window.MySDKEnsureVkBridge = function () {
+        if (window.vkBridge || window.VKBridge || window.bridge) {
+          return Promise.resolve(window.vkBridge || window.VKBridge || window.bridge);
+        }
 
-                try {
-                    navigator.mediaSession.playbackState = "none";
-                } catch (exception) {
-                }
+        if (vkBridgePromise) {
+          return vkBridgePromise;
+        }
 
-                var actions = [
-                    "play",
-                    "pause",
-                    "seekbackward",
-                    "seekforward",
-                    "previoustrack",
-                    "nexttrack",
-                    "stop",
-                    "seekto"
-                ];
-
-                for (var i = 0; i < actions.length; i++) {
-                    try {
-                        navigator.mediaSession.setActionHandler(actions[i], null);
-                    } catch (exception) {
-                    }
-                }
+        vkBridgePromise = loadExternalScript("https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js", "vk-bridge", 8000)
+          .then(function () {
+            var bridge = window.vkBridge || window.VKBridge || window.bridge;
+            if (!bridge || !bridge.send) {
+              throw new Error("VK Bridge is not available after script load.");
             }
 
-            function suppressMediaSessionDeferred() {
-                suppressMediaSession();
-                setTimeout(suppressMediaSession, 0);
-                setTimeout(suppressMediaSession, 250);
-                setTimeout(suppressMediaSession, 1000);
-            }
+            return bridge.send("VKWebAppInit")
+              .catch(function () {
+                return {};
+              })
+              .then(function () {
+                return bridge;
+              });
+          })
+          .catch(function (error) {
+            console.warn("MySDK VK Bridge init failed:", error);
+            throw error;
+          });
 
-            var audioContexts = [];
+        return vkBridgePromise;
+      };
 
-            function registerAudioContext(context) {
-                if (context && audioContexts.indexOf(context) < 0) {
-                    audioContexts.push(context);
-                }
+      window.MySDKEnsureVkBridge().catch(function () {});
 
-                return context;
-            }
+      window.addEventListener("contextmenu", function (event) { event.preventDefault(); });
+      document.addEventListener("touchmove", function (event) { event.preventDefault(); }, { passive: false });
 
-            function patchAudioContextConstructor() {
-                var NativeAudioContext = window.AudioContext || window.webkitAudioContext;
-                if (!NativeAudioContext || NativeAudioContext.__burgerBayPatched) {
-                    return;
-                }
+      var buildUrl = "Build";
+      var buildCacheBust = "VK-1777550096";
+      if (buildCacheBust.indexOf("__MYSDK_") === 0) {
+        buildCacheBust = String(Date.now());
+      }
 
-                function BurgerBayAudioContext(options) {
-                    return registerAudioContext(new NativeAudioContext(options));
-                }
+      function buildFile(fileName) {
+        return buildUrl + "/" + fileName + "?v=" + encodeURIComponent(buildCacheBust);
+      }
 
-                BurgerBayAudioContext.prototype = NativeAudioContext.prototype;
-                if (Object.setPrototypeOf) {
-                    Object.setPrototypeOf(BurgerBayAudioContext, NativeAudioContext);
-                }
-                BurgerBayAudioContext.__burgerBayPatched = true;
+      if (typeof WebAssembly !== "undefined" && typeof WebAssembly.instantiateStreaming === "function") {
+        WebAssembly.instantiateStreaming = undefined;
+      }
 
-                window.AudioContext = BurgerBayAudioContext;
-                if (window.webkitAudioContext === NativeAudioContext) {
-                    window.webkitAudioContext = BurgerBayAudioContext;
-                }
-            }
+      var loaderUrl = buildFile("VKOK.loader.js");
+      var config = {
+        dataUrl: buildFile("fb61c94840ff8df26bc1b072eb36408f.data"),
+        frameworkUrl: buildFile("33ce18c301cb22c0da6d79aab3884fd2.js"),
+        codeUrl: buildFile("efbda86d26788fcc98e123a61e40bcf8.wasm"),
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "DefaultCompany",
+        productName: "Galaxy Burger",
+        productVersion: "1.0",
+        showBanner: unityShowBanner
+      };
 
-            function setAudioContextsPaused(paused) {
-                for (var i = 0; i < audioContexts.length; i++) {
-                    var context = audioContexts[i];
-                    if (!context || context.state === "closed") {
-                        continue;
-                    }
-
-                    try {
-                        if (paused && context.state === "running") {
-                            context.suspend().catch(function () {});
-                        } else if (!paused && context.state === "suspended") {
-                            context.resume().catch(function () {});
-                        }
-                    } catch (exception) {
-                    }
-                }
-
-                suppressMediaSessionDeferred();
-            }
-
-            function collectLaunchParams() {
-                var params = new URLSearchParams(window.location.search || "");
-                var hash = window.location.hash ? window.location.hash.replace(/^#\/?/, "") : "";
-                if (hash.indexOf("=") >= 0) {
-                    var hashParams = new URLSearchParams(hash);
-                    hashParams.forEach(function (value, key) {
-                        params.set(key, value);
-                    });
-                }
-
-                try {
-                    var referrer = document.referrer || "";
-                    var queryStart = referrer.indexOf("?");
-                    if (queryStart >= 0) {
-                        var referrerParams = new URLSearchParams(referrer.substring(queryStart));
-                        referrerParams.forEach(function (value, key) {
-                            params.set(key, value);
-                        });
-                    }
-                } catch (exception) {
-                }
-
-                return params;
-            }
-
-            function detectOKPlatform() {
-                try {
-                    if (window.FAPI && window.FAPI.Util) {
-                        return true;
-                    }
-
-                    var href = window.location && window.location.href ? window.location.href : "";
-                    var referrer = document.referrer || "";
-                    var ancestors = "";
-                    if (window.location && window.location.ancestorOrigins) {
-                        for (var i = 0; i < window.location.ancestorOrigins.length; i++) {
-                            ancestors += " " + window.location.ancestorOrigins[i];
-                        }
-                    }
-
-                    var text = (href + " " + referrer + " " + ancestors).toLowerCase();
-                    if (text.indexOf("ok.ru") >= 0 || text.indexOf("odnoklassniki") >= 0 || text.indexOf("okcdn.ru") >= 0 || text.indexOf("api.ok.ru") >= 0) {
-                        return true;
-                    }
-
-                    var params = collectLaunchParams();
-                    var okParamNames = ["application_key", "apiconnection", "logged_user_id", "api_server", "session_key", "auth_sig"];
-                    var okParamCount = 0;
-                    for (var j = 0; j < okParamNames.length; j++) {
-                        if (params.has(okParamNames[j])) {
-                            okParamCount++;
-                        }
-                    }
-
-                    if (okParamCount >= 2) {
-                        return true;
-                    }
-
-                    var stPlatform = (params.get("st.platform") || params.get("st_platform") || "").toLowerCase();
-                    if (stPlatform.indexOf("ok") >= 0 || stPlatform.indexOf("odnoklassniki") >= 0) {
-                        return true;
-                    }
-
-                    return params.has("st.app") && params.has("st.signature") && !params.has("vk_app_id");
-                }
-                catch (exception) {
-                    console.warn("[MirraSDK] Failed to detect OK platform override.", exception);
-                    return false;
-                }
-            }
-
-            function ensureOkSdkInit() {
-                if (window.__BurgerBayOkSdkInitPromise) {
-                    if (window.__BurgerBayOkSdkInitialized || !window.__BurgerBayOkSdkInitFinished) {
-                        return window.__BurgerBayOkSdkInitPromise;
-                    }
-
-                    if (window.__BurgerBayOkSdkInitResolved) {
-                        return window.__BurgerBayOkSdkInitPromise;
-                    }
-
-                    window.__BurgerBayOkSdkInitPromise = null;
-                }
-
-                if (!detectOKPlatform()) {
-                    window.__BurgerBayOkSdkInitFinished = true;
-                    window.__BurgerBayOkSdkInitResolved = false;
-                    window.__BurgerBayOkSdkInitPromise = Promise.resolve(false);
-                    return window.__BurgerBayOkSdkInitPromise;
-                }
-
-                window.__BurgerBayOkSdkInitFinished = false;
-                window.__BurgerBayOkSdkInitResolved = false;
-                window.__BurgerBayOkSdkInitPromise = new Promise(function (resolve) {
-                    function finish(result) {
-                        window.__BurgerBayOkSdkInitFinished = true;
-                        window.__BurgerBayOkSdkInitResolved = !!result;
-                        resolve(!!result);
-                    }
-
-                    function initOkSdk() {
-                        if (!window.FAPI || typeof window.FAPI.init !== "function") {
-                            console.warn("[BurgerBay] OK FAPI.init is unavailable.");
-                            finish(false);
-                            return;
-                        }
-
-                        if (window.__BurgerBayOkSdkInitialized) {
-                            finish(true);
-                            return;
-                        }
-
-                        var requestParams = null;
-                        try {
-                            if (window.FAPI.Util && typeof window.FAPI.Util.getRequestParameters === "function") {
-                                requestParams = window.FAPI.Util.getRequestParameters();
-                            }
-                        } catch (requestParamsException) {
-                        }
-
-                        var launchParams = collectLaunchParams();
-                        var apiServer = (requestParams && (requestParams["api_server"] || requestParams["apiServer"])) ||
-                            launchParams.get("api_server") ||
-                            launchParams.get("apiServer") ||
-                            "https://api.ok.ru/";
-                        var apiConnection = (requestParams && (requestParams["apiconnection"] || requestParams["api_connection"] || requestParams["apiConnection"])) ||
-                            launchParams.get("apiconnection") ||
-                            launchParams.get("api_connection") ||
-                            launchParams.get("apiConnection") ||
-                            "";
-
-                        if (!apiConnection) {
-                            console.warn("[BurgerBay] OK SDK init skipped: apiconnection is missing.");
-                            finish(false);
-                            return;
-                        }
-
-                        try {
-                            window.FAPI.init(
-                                apiServer,
-                                apiConnection,
-                                function () {
-                                    window.__BurgerBayOkSdkInitialized = true;
-                                    console.log("[BurgerBay] OK SDK initialized.");
-                                    finish(true);
-                                },
-                                function (error) {
-                                    console.warn("[BurgerBay] OK SDK init failed.", error);
-                                    finish(false);
-                                }
-                            );
-                        } catch (initException) {
-                            console.warn("[BurgerBay] OK SDK init exception.", initException);
-                            finish(false);
-                        }
-                    }
-
-                    if (window.FAPI && typeof window.FAPI.init === "function") {
-                        initOkSdk();
-                        return;
-                    }
-
-                    var existingScript = document.getElementById("burgerbay-ok-fapi");
-                    if (existingScript) {
-                        existingScript.addEventListener("load", initOkSdk, { once: true });
-                        existingScript.addEventListener("error", function () {
-                            console.warn("[BurgerBay] Failed to load OK FAPI script.");
-                            finish(false);
-                        }, { once: true });
-                        return;
-                    }
-
-                    var script = document.createElement("script");
-                    script.id = "burgerbay-ok-fapi";
-                    script.src = "https://api.ok.ru/js/fapi5.js";
-                    script.async = true;
-                    script.defer = true;
-                    script.onload = initOkSdk;
-                    script.onerror = function () {
-                        console.warn("[BurgerBay] Failed to load OK FAPI script.");
-                        finish(false);
-                    };
-                    document.head.appendChild(script);
-                });
-
-                return window.__BurgerBayOkSdkInitPromise;
-            }
-
-            window.BurgerBay_IsOKPlatform = detectOKPlatform;
-            window.BurgerBay_EnsureOkSdkInit = ensureOkSdkInit;
-            ensureOkSdkInit();
-            window.BurgerBay_SuppressMediaSession = suppressMediaSessionDeferred;
-            patchAudioContextConstructor();
-            suppressMediaSessionDeferred();
-            window.addEventListener("blur", function () { setAudioContextsPaused(true); }, true);
-            window.addEventListener("focus", function () { setAudioContextsPaused(false); }, true);
-            window.addEventListener("pagehide", function () { setAudioContextsPaused(true); }, true);
-            window.addEventListener("pageshow", function () { setAudioContextsPaused(false); }, true);
-            document.addEventListener("visibilitychange", function () { setAudioContextsPaused(document.hidden); }, true);
-            document.addEventListener("pointerup", suppressMediaSessionDeferred, true);
-            document.addEventListener("touchend", suppressMediaSessionDeferred, true);
-            document.addEventListener("change", suppressMediaSessionDeferred, true);
-        })();
-
-        window.mirraSDK_library_shouldForceOKPlatform = window.mirraSDK_library_shouldForceOKPlatform || window.BurgerBay_IsOKPlatform;
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = function () {
+        createUnityInstance(canvas, config, function (progress) {
+          progressFill.style.width = (100 * progress) + "%";
+        }).then(function (unityInstance) {
+          window.unityInstance = unityInstance;
+          loading.style.display = "none";
+        }).catch(function (message) {
+          unityShowBanner(message, "error");
+        });
+      };
+      script.onerror = function () {
+        unityShowBanner("Could not load Unity loader: " + loaderUrl, "error");
+      };
+      document.body.appendChild(script);
     </script>
-    <script src="unityApp.js"></script>
-</body>
+  </body>
 </html>
