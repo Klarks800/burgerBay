@@ -132,7 +132,7 @@
       document.addEventListener("touchmove", function (event) { event.preventDefault(); }, { passive: false });
 
       var buildUrl = "Build";
-      var buildCacheBust = "VK-1777641876";
+      var buildCacheBust = "VK-1777643682";
       if (buildCacheBust.indexOf("__MYSDK_") === 0) {
         buildCacheBust = String(Date.now());
       }
@@ -148,7 +148,7 @@
       var loaderUrl = buildFile("VKOK.loader.js");
       var config = {
         dataUrl: buildFile("fe49eb0e8bed555dd78d495e9e8d2c6a.data"),
-        frameworkUrl: buildFile("96e7304fcac25f3be443c29e3c8e1ca0.js"),
+        frameworkUrl: buildFile("83a7d24745e7654796c58d4277c0a62e.js"),
         codeUrl: buildFile("02a9ed5ec9d8a9b01d8919fef365d9ba.wasm"),
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
