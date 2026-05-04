@@ -132,7 +132,7 @@
       document.addEventListener("touchmove", function (event) { event.preventDefault(); }, { passive: false });
 
       var buildUrl = "Build";
-      var buildCacheBust = "VK-1777643682";
+      var buildCacheBust = "VK-1777892656";
       if (buildCacheBust.indexOf("__MYSDK_") === 0) {
         buildCacheBust = String(Date.now());
       }
@@ -147,9 +147,9 @@
 
       var loaderUrl = buildFile("VKOK.loader.js");
       var config = {
-        dataUrl: buildFile("fe49eb0e8bed555dd78d495e9e8d2c6a.data"),
-        frameworkUrl: buildFile("83a7d24745e7654796c58d4277c0a62e.js"),
-        codeUrl: buildFile("02a9ed5ec9d8a9b01d8919fef365d9ba.wasm"),
+        dataUrl: buildFile("70118fb3d6057e381d622b81982f16c9.data"),
+        frameworkUrl: buildFile("b934b39b2d49a3b3b9c67ece8d9b01a1.js"),
+        codeUrl: buildFile("d4fc4201b4b136fd343a1845f383fd5d.wasm"),
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "Galaxy Burger",
