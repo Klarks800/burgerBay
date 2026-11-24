@@ -11,7 +11,7 @@
       #unity-root { position: fixed; inset: 0; background: #000; }
       #unity-canvas { width: 100%; height: 100%; display: block; background: #000; outline: none; }
       #mysdk-loading { position: absolute; left: 50%; bottom: 9vh; width: min(320px, 72vw); transform: translateX(-50%); font: 14px Arial, sans-serif; color: #fff; text-align: center; pointer-events: none; }
-      #mysdk-progress { height: 4px; margin-top: 12px; overflow: hidden; background: rgba(255, 255, 255, 0.2); }
+      #mysdk-progress { height: 4px; margin-top: 0; overflow: hidden; background: rgba(255, 255, 255, 0.2); }
       #mysdk-progress-fill { width: 0%; height: 100%; background: #fff; transition: width 0.15s ease-out; }
       #unity-warning { position: absolute; left: 0; right: 0; top: 0; z-index: 10; font: 13px Arial, sans-serif; text-align: center; }
     </style>
@@ -21,7 +21,6 @@
       <canvas id="unity-canvas" width=1920 height=1080 tabindex="-1"></canvas>
       <div id="unity-warning"></div>
       <div id="mysdk-loading">
-        <div>Loading</div>
         <div id="mysdk-progress"><div id="mysdk-progress-fill"></div></div>
       </div>
     </div>
@@ -103,7 +102,7 @@
           return vkBridgePromise;
         }
 
-        vkBridgePromise = loadExternalScript("https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js", "vk-bridge", 8000)
+        vkBridgePromise = loadExternalScript("vk-bridge.min.js", "vk-bridge", 8000)
           .then(function () {
             var bridge = window.vkBridge || window.VKBridge || window.bridge;
             if (!bridge || !bridge.send) {
@@ -126,13 +125,20 @@
         return vkBridgePromise;
       };
 
-      window.MySDKEnsureVkBridge().catch(function () {});
+      var launchParams = new URLSearchParams(location.search);
+      window.vkOkLaunch = launchParams.has("vk_app_id") || launchParams.get("vk_client") === "ok";
+      if (window.vkOkLaunch) {
+        window.vkOkBridgeReady = Promise.race([
+          window.MySDKEnsureVkBridge().catch(function () { return null; }),
+          new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 6000); })
+        ]);
+      }
 
       window.addEventListener("contextmenu", function (event) { event.preventDefault(); });
       document.addEventListener("touchmove", function (event) { event.preventDefault(); }, { passive: false });
 
       var buildUrl = "Build";
-      var buildCacheBust = "VK-1777923833";
+      var buildCacheBust = "VK-1795494554";
       if (buildCacheBust.indexOf("__MYSDK_") === 0) {
         buildCacheBust = String(Date.now());
       }
@@ -145,11 +151,11 @@
         WebAssembly.instantiateStreaming = undefined;
       }
 
-      var loaderUrl = buildFile("VKOK.loader.js");
+      var loaderUrl = buildFile("7a2dbded24d57e056180125b1583e7c4.loader.js");
       var config = {
-        dataUrl: buildFile("53f3aba305e5ac907aadeb35078adc8a.data"),
-        frameworkUrl: buildFile("7ef90b524b2817c6ba41132deae345a9.js"),
-        codeUrl: buildFile("1355c57faff9cb730e98b6072d0af231.wasm"),
+        dataUrl: buildFile("f67209fb66252f19b49de7c34a10a9ee.data"),
+        frameworkUrl: buildFile("f19d9ec5a65df5f4e8eddf0a4e74f2ca.framework.js"),
+        codeUrl: buildFile("57b8e74df39e717a402d9b4915c2ba40.wasm"),
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "Galaxy Burger",
